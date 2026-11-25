@@ -29,8 +29,11 @@ internal sealed class Updater : IDisposable
     internal static string CurrentText => Current.ToString(3);
 
     // Nur die veröffentlichte Einzeldatei-EXE aktualisiert sich selbst, nicht ein Entwickler-Build.
+    // Eine leere Location ist hier genau das gesuchte Merkmal der Einzeldatei.
+#pragma warning disable IL3000
     internal static string? ExecutablePath =>
         string.IsNullOrEmpty(typeof(Updater).Assembly.Location) ? Environment.ProcessPath : null;
+#pragma warning restore IL3000
 
     internal Updater(Settings settings, Func<bool> idle, Action exit)
     {
