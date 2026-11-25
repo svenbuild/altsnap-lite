@@ -115,7 +115,7 @@ internal static class Program
             "Linke und rechte Tasten zusammenfassen");
         Check(Hotkeys.IsValid([Hotkeys.Alt]) && Hotkeys.IsValid([Hotkeys.Control, Hotkeys.Win]) && Hotkeys.IsValid([0x14]) && Hotkeys.IsValid([0x7C]),
             "Alt, Strg + Win, CapsLock und F13 sind erlaubt");
-        Check(!Hotkeys.IsValid([0x41]) && !Hotkeys.IsValid([0x20]) && !Hotkeys.IsValid([]) && !Hotkeys.IsValid(null)
+        Check(!Hotkeys.IsValid([0x41]) && !Hotkeys.IsValid([0x20]) && !Hotkeys.IsValid([0x13]) && !Hotkeys.IsValid([]) && !Hotkeys.IsValid(null)
             && !Hotkeys.IsValid([Hotkeys.Alt, Hotkeys.Alt]), "Buchstaben, Leertaste, leer und doppelt sind nicht erlaubt");
         Check(Hotkeys.Name([Hotkeys.Alt, Hotkeys.Control]) == "Strg + Alt" && Hotkeys.Name([0x7C]) == "F13" && Hotkeys.Name([0x14]) == "CapsLock",
             "Tastennamen in fester Reihenfolge");
@@ -145,23 +145,34 @@ internal static class Program
         controller.HandleKey(up, f13, true, 3200);
 
         int[]? result = [];
-        controller.Record(keys => result = keys);
+        controller.Record(keys => result = keys, 0);
         Check(controller.HandleKey(down, 0xA2, false, 4000) && controller.HandleKey(0x104, 0xA5, false, 4010), "Aufnahme schluckt Strg und Alt");
         controller.HandleKey(up, 0xA2, false, 4100);
         Check(result is { Length: 0 }, "Aufnahme läuft, solange eine Taste gedrückt ist");
         controller.HandleKey(0x105, 0xA5, false, 4200);
+        Pump(50);
         Check(result != null && result.Order().SequenceEqual(new[] { Hotkeys.Control, Hotkeys.Alt }.Order()), "Aufnahme ergibt Strg + Alt");
         Check(!controller.HandleKey(down, 0x41, false, 4300), "Nach der Aufnahme gehen Tasten wieder durch");
         controller.HandleKey(up, 0x41, false, 4300);
         result = [];
-        controller.Record(keys => result = keys);
+        controller.Record(keys => result = keys, 0);
         controller.HandleKey(down, Hotkeys.Escape, false, 5000);
+        Pump(50);
         Check(result == null, "Esc bricht die Aufnahme ab");
         controller.HandleKey(up, Hotkeys.Escape, false, 5010);
         result = [];
-        controller.Record(keys => result = keys);
+        controller.Record(keys => result = keys, 0);
         controller.CancelRecording();
+        Pump(50);
         Check(result == null, "Schliessen der Einstellungen bricht die Aufnahme ab");
+        result = [];
+        controller.Record(keys => result = keys, 6000);
+        Check(!controller.HandleKey(up, 0x0D, false, 6100), "Loslassen einer vorher gedrückten Taste geht durch");
+        controller.HandleKey(down, 0xA2, false, 6200);
+        Check(!controller.HandleKey(down, 0x41, false, 17000), "Nach 10 s endet eine hängende Aufnahme und Tasten gehen durch");
+        Pump(50);
+        Check(result == null, "Hängende Aufnahme liefert kein Ergebnis");
+        controller.HandleKey(up, 0x41, false, 17000);
     }
 
     private static void UpdaterChecks()

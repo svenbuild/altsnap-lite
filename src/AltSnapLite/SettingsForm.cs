@@ -11,6 +11,7 @@ internal sealed class SettingsForm : Form
     private readonly Label tagline;
     private readonly List<GestureRow> rows = new();
     private readonly WindowController? controller;
+    private readonly System.Windows.Forms.Timer recordTimeout = new() { Interval = 10_000 };
     private readonly Bitmap logo;
     private readonly List<Font> fonts = new();
     private bool refreshing;
@@ -64,6 +65,7 @@ internal sealed class SettingsForm : Form
         y = 6;
         picker = new KeyPicker(theme, Strings.Hotkey) { Location = new Point(1, y), Size = new Size(398, 44), Font = Font, Enabled = controller != null };
         picker.Click += (_, _) => PickKey();
+        recordTimeout.Tick += (_, _) => { recordTimeout.Stop(); controller?.CancelRecording(); };
         options.Controls.Add(picker);
         y += 44;
         AddToggle(options, Strings.Enabled, ref y, () => settings.Enabled, value => settings.Enabled = value);
@@ -97,8 +99,10 @@ internal sealed class SettingsForm : Form
         if (controller == null) return;
         if (picker.Recording) { controller.CancelRecording(); return; }
         picker.Recording = true;
+        recordTimeout.Start();
         controller.Record(keys =>
         {
+            recordTimeout.Stop();
             picker.Recording = false;
             if (keys == null || IsDisposed) return;
             if (!Hotkeys.IsValid(keys))
@@ -109,7 +113,14 @@ internal sealed class SettingsForm : Form
             settings.Hotkey = keys;
             save();
             RefreshValues();
-        });
+        }, Environment.TickCount64);
+    }
+
+    // Aufnahme beenden, sobald das Fenster nicht mehr vorne ist oder nach 10 Sekunden.
+    protected override void OnDeactivate(EventArgs e)
+    {
+        controller?.CancelRecording();
+        base.OnDeactivate(e);
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
@@ -182,6 +193,7 @@ internal sealed class SettingsForm : Form
         base.Dispose(disposing);
         if (!disposing) return;
         logo.Dispose();
+        recordTimeout.Dispose();
         foreach (var font in fonts) font.Dispose();
     }
 }

@@ -18,8 +18,10 @@ internal sealed class WindowController : IDisposable
     private nint hook, keyboardHook;
     // Nur für Nicht-Zusatztasten (z. B. CapsLock): Zeit des letzten Drückens und ob es geschluckt wurde.
     private readonly Dictionary<int, long> keyTimes = new();
-    private readonly HashSet<int> swallowed = new(), recordHeld = new(), recorded = new();
+    private readonly HashSet<int> swallowed = new(), recordHeld = new(), recorded = new(), heldBefore = new();
     private Action<int[]?>? recorder;
+    private long recordStart;
+    private SynchronizationContext? recordContext;
     private Gesture? gesture;
     private nint pendingTopmost;
     private bool middleConsumed, updatePosted;
@@ -76,22 +78,31 @@ internal sealed class WindowController : IDisposable
     }
 
     // Nächste gedrückte Taste oder Kombination aufnehmen; null bei Esc oder Abbruch.
-    internal void Record(Action<int[]?> done)
+    internal void Record(Action<int[]?> done, long now)
     {
         recorder = done;
+        recordStart = now;
+        recordContext = SynchronizationContext.Current;
         recordHeld.Clear();
         recorded.Clear();
+        // Schon gedrückte Tasten (z. B. Enter, mit dem die Aufnahme gestartet wurde) gehören nicht dazu.
+        heldBefore.Clear();
+        for (int key = 0x08; key <= 0xFE; key++)
+            if (live && (Native.GetAsyncKeyState(key) & 0x8000) != 0) heldBefore.Add(Hotkeys.Normalize(key));
         UpdateKeyboardHook();
     }
 
     internal void CancelRecording() { if (recorder != null) FinishRecording(null); }
 
+    // Das Ergebnis erst nach dem Hook verarbeiten: Speichern oder eine Meldung darf den Hook nicht aufhalten.
     private void FinishRecording(int[]? keys)
     {
         var done = recorder;
         recorder = null;
         UpdateKeyboardHook();
-        done?.Invoke(keys);
+        if (done == null) return;
+        if (recordContext != null) recordContext.Post(_ => done(keys), null);
+        else done(keys);
     }
 
     private nint OnKey(int code, nint message, nint pointer)
@@ -114,6 +125,14 @@ internal sealed class WindowController : IDisposable
         bool down = message is 0x100 or 0x104;
         if (recorder != null)
         {
+            // Sicherheitsnetz: eine Aufnahme, deren Loslassen verloren ging (z. B. Sperrbildschirm), endet nach 10 s.
+            if (now - recordStart > 10_000) { FinishRecording(null); return false; }
+            // Tasten, die schon vor der Aufnahme gedrückt waren, normal durchlassen.
+            if (heldBefore.Contains(key))
+            {
+                if (!down) heldBefore.Remove(key);
+                return false;
+            }
             // Beim Aufnehmen geht keine Taste an andere Programme (sonst öffnet z. B. Win das Startmenü).
             if (down)
             {
@@ -121,7 +140,8 @@ internal sealed class WindowController : IDisposable
                 recordHeld.Add(key);
                 recorded.Add(key);
             }
-            else if (recordHeld.Remove(key) && recordHeld.Count == 0) FinishRecording(recorded.ToArray());
+            else if (!recordHeld.Remove(key)) return false;
+            else if (recordHeld.Count == 0) FinishRecording(recorded.ToArray());
             return true;
         }
         if (Hotkeys.IsModifier(key) || !settings.Hotkey.Contains(key)) return false;

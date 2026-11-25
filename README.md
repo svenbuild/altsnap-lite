@@ -52,7 +52,7 @@ The EXE is self-contained (the .NET runtime is included), so nothing else needs 
 ## Features
 
 - **Silent automatic updates.** Every 6 hours AltSnap Lite checks GitHub Releases. A new version is downloaded, verified with its SHA-256 checksum, swapped in while no gesture is active and restarted in the background. Turn it off with *Update automatically*. Updates need write access to the EXE's folder, so keep it in a user folder rather than `Program Files`. If a new version fails to start, AltSnap Lite returns to the previous one and skips that version.
-- **Your own gesture key.** Alt is the default. Click the key in the settings and press another one: Ctrl, Shift, Win, Caps Lock, Scroll Lock, Pause, Insert, the Menu key or F1 to F24, also combined like Ctrl + Alt. Keys like Caps Lock then only work for AltSnap Lite.
+- **Your own gesture key.** Alt is the default. Click the key in the settings and press another one: Ctrl, Shift, Win, Caps Lock, Scroll Lock, Insert, the Menu key or F1 to F24, also combined like Ctrl + Alt. Keys like Caps Lock then only work for AltSnap Lite.
 - **Light and dark mode**, following your Windows setting.
 - **English and German**, following your Windows display language.
 - **Start with Windows** for the current user, without admin rights.
@@ -104,6 +104,6 @@ A release is published by pushing a tag like `v1.1.0`; GitHub Actions builds, te
 
 **Updates** kommen automatisch und still: alle 6 Stunden wird auf GitHub nachgesehen, eine neue Version geladen, per SHA-256 geprüft und im Hintergrund neu gestartet. Abschaltbar mit *Automatisch aktualisieren*. Dafür braucht die App Schreibrechte im Ordner der EXE, also besser nicht unter `Programme` ablegen.
 
-**Andere Taste statt Alt:** In den Einstellungen auf die Taste klicken und die neue drücken. Möglich sind Strg, Umschalt, Win, CapsLock, Rollen, Pause, Einfg, Menütaste und F1 bis F24, auch kombiniert wie Strg + Alt.
+**Andere Taste statt Alt:** In den Einstellungen auf die Taste klicken und die neue drücken. Möglich sind Strg, Umschalt, Win, CapsLock, Rollen, Einfg, Menütaste und F1 bis F24, auch kombiniert wie Strg + Alt.
 
 Die Oberfläche ist deutsch, wenn Windows auf Deutsch eingestellt ist, sonst englisch. Hell und dunkel folgen der Windows-Einstellung. Programme, die als Administrator laufen, lassen sich nur steuern, wenn AltSnap Lite ebenfalls als Administrator läuft.

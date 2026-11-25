@@ -9,9 +9,10 @@ internal static class Hotkeys
 
     internal static bool IsModifier(int key) => key is Shift or Control or Alt or Win;
 
-    // Erlaubt sind Zusatztasten und Tasten, die beim Tippen nicht fehlen: CapsLock, Pause, Rollen, Einfg, Menütaste, F1 bis F24.
+    // Erlaubt sind Zusatztasten und Tasten, die beim Tippen nicht fehlen: CapsLock, Rollen, Einfg, Menütaste, F1 bis F24.
+    // Pause fehlt, weil sie sofort als losgelassen gemeldet wird und sich nicht halten lässt.
     internal static bool IsAllowed(int key) =>
-        IsModifier(key) || key is 0x14 or 0x13 or 0x91 or 0x2D or 0x5D || key is >= 0x70 and <= 0x87;
+        IsModifier(key) || key is 0x14 or 0x91 or 0x2D or 0x5D || key is >= 0x70 and <= 0x87;
 
     internal static bool IsValid(int[]? keys) =>
         keys is { Length: > 0 and <= 4 } && keys.All(IsAllowed) && keys.Distinct().Count() == keys.Length;
@@ -36,7 +37,6 @@ internal static class Hotkeys
         Alt => "Alt",
         Win => "Win",
         0x14 => "CapsLock",
-        0x13 => "Pause",
         0x91 => Strings.German ? "Rollen" : "Scroll Lock",
         0x2D => Strings.German ? "Einfg" : "Insert",
         0x5D => Strings.German ? "Menütaste" : "Menu key",

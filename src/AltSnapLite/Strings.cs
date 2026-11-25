@@ -17,8 +17,8 @@ internal static class Strings
     internal static string Hotkey => T("Taste für Gesten", "Gesture key");
     internal static string PressKey => T("Taste drücken …", "Press a key …");
     internal static string KeyNotAllowed => T(
-        "Diese Taste geht nicht. Möglich sind Strg, Alt, Umschalt, Win, CapsLock, Rollen, Pause, Einfg, Menütaste und F1 bis F24, auch kombiniert.",
-        "This key can't be used. Possible are Ctrl, Alt, Shift, Win, Caps Lock, Scroll Lock, Pause, Insert, Menu key and F1 to F24, also combined.");
+        "Diese Taste geht nicht. Möglich sind Strg, Alt, Umschalt, Win, CapsLock, Rollen, Einfg, Menütaste und F1 bis F24, auch kombiniert.",
+        "This key can't be used. Possible are Ctrl, Alt, Shift, Win, Caps Lock, Scroll Lock, Insert, Menu key and F1 to F24, also combined.");
     internal static string StartWithWindows => T("Mit Windows starten", "Start with Windows");
     internal static string AutoUpdate => T("Automatisch aktualisieren", "Update automatically");
     internal static string SnapDistance => T("Abstand zum Einrasten", "Snap distance");
