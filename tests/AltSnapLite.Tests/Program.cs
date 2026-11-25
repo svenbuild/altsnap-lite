@@ -137,34 +137,34 @@ internal static class Program
         var settings = new Settings { Hotkey = [f13] };
         using var controller = new WindowController(settings, installHook: false, findWindow: _ => 0);
         Check(!controller.IsHotkeyHeld(1000), "F13 nicht gedrückt");
-        Check(controller.HandleKey(down, f13, false, 1000) && controller.IsHotkeyHeld(1100), "F13 drücken wird geschluckt und gilt als gehalten");
-        Check(controller.HandleKey(down, f13, false, 1400) && controller.IsHotkeyHeld(2800), "Wiederholung hält die Taste aktiv");
+        Check(controller.HandleKey(down, f13, 1000) && controller.IsHotkeyHeld(1100), "F13 drücken wird geschluckt und gilt als gehalten");
+        Check(controller.HandleKey(down, f13, 1400) && controller.IsHotkeyHeld(2800), "Wiederholung hält die Taste aktiv");
         Check(!controller.IsHotkeyHeld(3000), "Ohne Wiederholung gilt die Taste nach 1,5 s als losgelassen");
-        Check(controller.HandleKey(up, f13, false, 3100) && !controller.IsHotkeyHeld(3100), "Loslassen wird geschluckt und beendet das Halten");
-        Check(!controller.HandleKey(down, 0x41, false, 3200) && !controller.HandleKey(down, f13, true, 3200), "Andere und eingespeiste Tasten bleiben unberührt");
-        controller.HandleKey(up, f13, true, 3200);
+        Check(controller.HandleKey(up, f13, 3100) && !controller.IsHotkeyHeld(3100), "Loslassen wird geschluckt und beendet das Halten");
+        Check(!controller.HandleKey(down, 0x41, 3200) && !controller.HandleKey(down, 0xE8, 3200), "Andere Tasten und die eigene Dummy-Taste bleiben unberührt");
+        controller.HandleKey(up, 0x41, 3200);
         settings.Enabled = false;
-        Check(!controller.HandleKey(down, f13, false, 3300) && !controller.HandleKey(up, f13, false, 3350), "Im Pause-Modus wird nichts geschluckt");
+        Check(!controller.HandleKey(down, f13, 3300) && !controller.HandleKey(up, f13, 3350), "Im Pause-Modus wird nichts geschluckt");
         settings.Enabled = true;
         
         int[]? result = [];
         controller.Record(keys => result = keys, 0);
-        Check(controller.HandleKey(down, 0xA2, false, 4000) && controller.HandleKey(0x104, 0xA5, false, 4010), "Aufnahme schluckt Strg und Alt");
-        controller.HandleKey(up, 0xA2, false, 4100);
+        Check(controller.HandleKey(down, 0xA2, 4000) && controller.HandleKey(0x104, 0xA5, 4010), "Aufnahme schluckt Strg und Alt");
+        controller.HandleKey(up, 0xA2, 4100);
         Check(result is { Length: 0 }, "Aufnahme läuft, solange eine Taste gedrückt ist");
-        controller.HandleKey(0x105, 0xA5, false, 4200);
+        controller.HandleKey(0x105, 0xA5, 4200);
         Pump(50);
         Check(result != null && result.Order().SequenceEqual(new[] { Hotkeys.Control, Hotkeys.Alt }.Order()), "Aufnahme ergibt Strg + Alt");
-        Check(!controller.HandleKey(down, 0x41, false, 4300), "Nach der Aufnahme gehen Tasten wieder durch");
-        controller.HandleKey(up, 0x41, false, 4300);
+        Check(!controller.HandleKey(down, 0x41, 4300), "Nach der Aufnahme gehen Tasten wieder durch");
+        controller.HandleKey(up, 0x41, 4300);
         result = [];
         controller.Record(keys => result = keys, 0);
-        controller.HandleKey(down, 0xA2, false, 4900);
-        controller.HandleKey(down, Hotkeys.Escape, false, 5000);
+        controller.HandleKey(down, 0xA2, 4900);
+        controller.HandleKey(down, Hotkeys.Escape, 5000);
         Pump(50);
         Check(result == null, "Esc bricht die Aufnahme jederzeit ab");
-        controller.HandleKey(up, Hotkeys.Escape, false, 5010);
-        controller.HandleKey(up, 0xA2, false, 5010);
+        controller.HandleKey(up, Hotkeys.Escape, 5010);
+        controller.HandleKey(up, 0xA2, 5010);
         result = [];
         controller.Record(keys => result = keys, 0);
         controller.CancelRecording();
@@ -172,12 +172,12 @@ internal static class Program
         Check(result == null, "Schliessen der Einstellungen bricht die Aufnahme ab");
         result = [];
         controller.Record(keys => result = keys, 6000);
-        Check(!controller.HandleKey(up, 0x0D, false, 6100), "Loslassen einer vorher gedrückten Taste geht durch");
-        controller.HandleKey(down, 0xA2, false, 6200);
-        Check(!controller.HandleKey(down, 0x41, false, 17000), "Nach 10 s endet eine hängende Aufnahme und Tasten gehen durch");
+        Check(!controller.HandleKey(up, 0x0D, 6100), "Loslassen einer vorher gedrückten Taste geht durch");
+        controller.HandleKey(down, 0xA2, 6200);
+        Check(!controller.HandleKey(down, 0x41, 17000), "Nach 10 s endet eine hängende Aufnahme und Tasten gehen durch");
         Pump(50);
         Check(result == null, "Hängende Aufnahme liefert kein Ergebnis");
-        controller.HandleKey(up, 0x41, false, 17000);
+        controller.HandleKey(up, 0x41, 17000);
     }
 
     private static void UpdaterChecks()

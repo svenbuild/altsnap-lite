@@ -10,6 +10,7 @@ internal sealed class WindowController : IDisposable
     private readonly Func<Native.Point, nint> findWindow;
     private readonly Native.HookProc callback, keyboardCallback;
     private readonly bool live;
+    private const byte DummyKey = 0xE8;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 16 };
     private readonly SnapPreview preview = new();
     private readonly TopmostFrames frames = new();
@@ -113,16 +114,17 @@ internal sealed class WindowController : IDisposable
         try
         {
             var data = Marshal.PtrToStructure<Native.KeyData>(pointer);
-            if (HandleKey((int)message, (int)data.Key, (data.Flags & 0x10) != 0, Environment.TickCount64)) return 1;
+            if (HandleKey((int)message, (int)data.Key, Environment.TickCount64)) return 1;
         }
         catch (Exception) { }
         return Native.CallNextHookEx(keyboardHook, code, message, pointer);
     }
 
     // true = Tastenereignis schlucken.
-    internal bool HandleKey(int message, int key, bool injected, long now)
+    // Eingespeiste Tasten zählen mit (z. B. F13 aus PowerToys oder AutoHotkey), nur die eigene Dummy-Taste nicht.
+    internal bool HandleKey(int message, int key, long now)
     {
-        if (injected) return false;
+        if (key == DummyKey) return false;
         key = Hotkeys.Normalize(key);
         bool down = message is 0x100 or 0x104;
         if (recorder != null)
@@ -180,8 +182,8 @@ internal sealed class WindowController : IDisposable
     private void SuppressMenu()
     {
         if (!live || !settings.Hotkey.Any(key => key is Hotkeys.Alt or Hotkeys.Win)) return;
-        Native.keybd_event(0xE8, 0, 0, 0);
-        Native.keybd_event(0xE8, 0, 2, 0);
+        Native.keybd_event(DummyKey, 0, 0, 0);
+        Native.keybd_event(DummyKey, 0, 2, 0);
     }
 
     // Keine Geste aktiv: ein Update darf die App jetzt neu starten.
