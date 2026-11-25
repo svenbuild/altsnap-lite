@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Unit tests
+        run: dotnet run --project tests/AltSnapLite.Tests -c Release
+      - name: Build
+        run: ./build.ps1
+      - name: Smoke test of the published EXE
+        timeout-minutes: 2
+        run: |
+          $process = Start-Process dist/AltSnapLite.exe -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Smoke test failed with exit code $($process.ExitCode)" }
