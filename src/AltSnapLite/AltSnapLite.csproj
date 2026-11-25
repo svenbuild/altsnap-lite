@@ -9,7 +9,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../../assets/app.ico</ApplicationIcon>
     <AssemblyName>AltSnapLite</AssemblyName>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
     <Description>Move, resize, snap and pin windows with Alt + mouse.</Description>
     <Product>AltSnap Lite</Product>
     <Copyright>AltSnap Lite contributors, GPL-3.0</Copyright>

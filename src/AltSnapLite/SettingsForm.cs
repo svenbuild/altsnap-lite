@@ -7,13 +7,18 @@ internal sealed class SettingsForm : Form
     private readonly Action save;
     private readonly List<(ToggleSwitch Box, Func<bool> Read)> toggles = new();
     private readonly Slider distance;
+    private readonly KeyPicker picker;
+    private readonly Label tagline;
+    private readonly List<GestureRow> rows = new();
+    private readonly WindowController? controller;
     private readonly Bitmap logo;
     private readonly List<Font> fonts = new();
     private bool refreshing;
 
-    internal SettingsForm(Settings settings, Action save, Theme? colors = null)
+    internal SettingsForm(Settings settings, Action save, Theme? colors = null, WindowController? controller = null)
     {
         theme = colors ?? Theme.Current;
+        this.controller = controller;
         this.settings = settings;
         this.save = save;
         SuspendLayout();
@@ -23,7 +28,7 @@ internal sealed class SettingsForm : Form
         Font = MakeFont(9.75f);
         ForeColor = theme.Text;
         BackColor = theme.Window;
-        ClientSize = new Size(856, 494);
+        ClientSize = new Size(856, 538);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -37,23 +42,30 @@ internal sealed class SettingsForm : Form
             e.Graphics.DrawImage(logo, 24 * scale, 22 * scale, 46 * scale, 46 * scale);
         };
         header.Controls.Add(Label("AltSnap Lite", 84, 20, 500, 32, 16, theme.Text, FontStyle.Bold));
-        header.Controls.Add(Label($"{Strings.Version} {Updater.CurrentText}  ·  {Strings.Tagline}", 85, 52, 600, 22, 9.75f, theme.Muted));
+        tagline = Label("", 85, 52, 600, 22, 9.75f, theme.Muted);
+        header.Controls.Add(tagline);
         Controls.Add(header);
 
         Controls.Add(Label(Strings.Gestures.ToUpperInvariant(), 24, 96, 360, 20, 8.25f, theme.Muted, FontStyle.Bold));
         Controls.Add(Label(Strings.Settings.ToUpperInvariant(), 440, 96, 360, 20, 8.25f, theme.Muted, FontStyle.Bold));
 
-        var gestures = new Card(theme) { Location = new Point(20, 120), Size = new Size(400, 322) };
-        int y = 8;
-        foreach (var (keys, action) in Strings.GestureList)
+        var gestures = new Card(theme) { Location = new Point(20, 120), Size = new Size(400, 366) };
+        int y = 9;
+        foreach (var (input, action) in Strings.GestureList)
         {
-            gestures.Controls.Add(new GestureRow(theme, keys, action) { Location = new Point(1, y), Size = new Size(398, 51) });
-            y += 51;
+            var row = new GestureRow(theme, "", input, action) { Location = new Point(1, y), Size = new Size(398, 58) };
+            rows.Add(row);
+            gestures.Controls.Add(row);
+            y += 58;
         }
         Controls.Add(gestures);
 
-        var options = new Card(theme) { Location = new Point(436, 120), Size = new Size(400, 322) };
+        var options = new Card(theme) { Location = new Point(436, 120), Size = new Size(400, 366) };
         y = 6;
+        picker = new KeyPicker(theme, Strings.Hotkey) { Location = new Point(1, y), Size = new Size(398, 44), Font = Font, Enabled = controller != null };
+        picker.Click += (_, _) => PickKey();
+        options.Controls.Add(picker);
+        y += 44;
         AddToggle(options, Strings.Enabled, ref y, () => settings.Enabled, value => settings.Enabled = value);
         AddToggle(options, Strings.Snap, ref y, () => settings.Snap, value => settings.Snap = value);
         AddToggle(options, Strings.Preview, ref y, () => settings.Preview, value => settings.Preview = value);
@@ -66,10 +78,10 @@ internal sealed class SettingsForm : Form
         options.Controls.Add(distance);
         Controls.Add(options);
 
-        Controls.Add(Label(Strings.Footer, 24, 458, 600, 22, 9, theme.Muted));
+        Controls.Add(Label(Strings.Footer, 24, 502, 600, 22, 9, theme.Muted));
         var link = new LinkLabel
         {
-            Text = Strings.Website, Location = new Point(736, 458), Size = new Size(96, 22), TextAlign = ContentAlignment.TopRight,
+            Text = Strings.Website, Location = new Point(736, 502), Size = new Size(96, 22), TextAlign = ContentAlignment.TopRight,
             LinkColor = theme.Accent, ActiveLinkColor = theme.Accent, VisitedLinkColor = theme.Accent,
             LinkBehavior = LinkBehavior.HoverUnderline, Font = MakeFont(9), BackColor = theme.Window
         };
@@ -77,6 +89,33 @@ internal sealed class SettingsForm : Form
         Controls.Add(link);
         ResumeLayout(false);
         RefreshValues();
+    }
+
+    // Nächsten Tastendruck als neue Taste für die Gesten übernehmen.
+    private void PickKey()
+    {
+        if (controller == null) return;
+        if (picker.Recording) { controller.CancelRecording(); return; }
+        picker.Recording = true;
+        controller.Record(keys =>
+        {
+            picker.Recording = false;
+            if (keys == null || IsDisposed) return;
+            if (!Hotkeys.IsValid(keys))
+            {
+                MessageBox.Show(this, Strings.KeyNotAllowed, "AltSnap Lite", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            settings.Hotkey = keys;
+            save();
+            RefreshValues();
+        });
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        controller?.CancelRecording();
+        base.OnFormClosed(e);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -129,6 +168,10 @@ internal sealed class SettingsForm : Form
         try
         {
             foreach (var (box, read) in toggles) box.Checked = read();
+            string key = Hotkeys.Name(settings.Hotkey);
+            picker.Value = key;
+            tagline.Text = $"{Strings.Version} {Updater.CurrentText}  ·  {Strings.Tagline(key)}";
+            foreach (var row in rows) row.Hotkey = key;
             distance.Value = settings.SnapDistance;
         }
         finally { refreshing = false; }

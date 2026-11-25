@@ -44,7 +44,7 @@ internal sealed class TrayApp : ApplicationContext
         if (updated) tray.ShowBalloonTip(5000, Strings.UpdatedTitle, Strings.UpdatedText(Updater.CurrentText), ToolTipIcon.None);
         else if (settings.IsNew)
         {
-            tray.ShowBalloonTip(8000, Strings.WelcomeTitle, Strings.WelcomeText, ToolTipIcon.None);
+            tray.ShowBalloonTip(8000, Strings.WelcomeTitle, Strings.WelcomeText(Hotkeys.Name(settings.Hotkey)), ToolTipIcon.None);
             SaveSettings();
         }
     }
@@ -82,14 +82,14 @@ internal sealed class TrayApp : ApplicationContext
         menu.Renderer = new MenuRenderer(Theme.Current);
         foreach (ToolStripItem item in menu.Items)
             if (item is ToolStripMenuItem toggle && toggle.Tag is Func<bool> read) toggle.Checked = read();
-        tray.Text = settings.Enabled ? Strings.TrayActive : Strings.TrayPaused;
+        tray.Text = settings.Enabled ? Strings.TrayActive(Hotkeys.Name(settings.Hotkey)) : Strings.TrayPaused;
         tray.Icon = settings.Enabled ? icon : pausedIcon;
         enabled.Text = settings.Enabled ? Strings.Enabled : Strings.Paused;
     }
 
     private void ShowSettings()
     {
-        if (form == null || form.IsDisposed) form = new SettingsForm(settings, SaveSettings) { Icon = icon };
+        if (form == null || form.IsDisposed) form = new SettingsForm(settings, SaveSettings, controller: controller) { Icon = icon };
         form.RefreshValues();
         form.Show();
         if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
@@ -103,6 +103,7 @@ internal sealed class TrayApp : ApplicationContext
         {
             MessageBox.Show(Strings.SaveFailed + "\n\n" + e.Message, "AltSnap Lite");
         }
+        controller.UpdateKeyboardHook();
         RefreshMenu();
     }
 

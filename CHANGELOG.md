@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+- Choose your own gesture key: instead of Alt you can use Ctrl, Shift, Win, Caps Lock, Scroll Lock, Pause, Insert, the Menu key or F1 to F24, also combined (for example Ctrl + Alt). Click the key in the settings and press the new one.
+- Keys like Caps Lock or F13 are reserved for AltSnap Lite while they are the gesture key.
+- After a gesture with Alt or Win, releasing the key no longer opens the Start menu or the menu bar of the window.
+
 ## 1.1.1
 
 - Fix: after a silent update the previous version now exits reliably, so the new version takes over right away instead of at the next start.

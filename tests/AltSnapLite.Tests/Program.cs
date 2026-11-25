@@ -18,6 +18,7 @@ internal static class Program
             GeometryChecks();
             SettingsChecks();
             UpdaterChecks();
+            HotkeyChecks();
             if (args.Contains("--integration")) IntegrationChecks();
             Console.WriteLine($"PASS: {assertions} Prüfungen" );
             return 0;
@@ -105,6 +106,62 @@ internal static class Program
             if (File.Exists(path)) File.Delete(path);
             if (Directory.Exists(directory)) Directory.Delete(directory);
         }
+    }
+
+    private static void HotkeyChecks()
+    {
+        Strings.German = true;
+        Check(Hotkeys.Normalize(0xA4) == Hotkeys.Alt && Hotkeys.Normalize(0xA3) == Hotkeys.Control && Hotkeys.Normalize(0x5C) == Hotkeys.Win,
+            "Linke und rechte Tasten zusammenfassen");
+        Check(Hotkeys.IsValid([Hotkeys.Alt]) && Hotkeys.IsValid([Hotkeys.Control, Hotkeys.Win]) && Hotkeys.IsValid([0x14]) && Hotkeys.IsValid([0x7C]),
+            "Alt, Strg + Win, CapsLock und F13 sind erlaubt");
+        Check(!Hotkeys.IsValid([0x41]) && !Hotkeys.IsValid([0x20]) && !Hotkeys.IsValid([]) && !Hotkeys.IsValid(null)
+            && !Hotkeys.IsValid([Hotkeys.Alt, Hotkeys.Alt]), "Buchstaben, Leertaste, leer und doppelt sind nicht erlaubt");
+        Check(Hotkeys.Name([Hotkeys.Alt, Hotkeys.Control]) == "Strg + Alt" && Hotkeys.Name([0x7C]) == "F13" && Hotkeys.Name([0x14]) == "CapsLock",
+            "Tastennamen in fester Reihenfolge");
+
+        var directory = Path.Combine(Path.GetTempPath(), "AltSnapLite-hotkey-" + Guid.NewGuid());
+        var path = Path.Combine(directory, "settings.json");
+        try
+        {
+            new Settings { Hotkey = [Hotkeys.Control, Hotkeys.Win] }.Save(path);
+            Check(Settings.Load(path).Hotkey.SequenceEqual([Hotkeys.Control, Hotkeys.Win]), "Taste speichern und lesen");
+            File.WriteAllText(path, "{\"Hotkey\":[65]}");
+            Check(Settings.Load(path).Hotkey.SequenceEqual(Hotkeys.Default), "Ungültige Taste fällt auf Alt zurück");
+            File.WriteAllText(path, "{\"Hotkey\":null}");
+            Check(Settings.Load(path).Hotkey.SequenceEqual(Hotkeys.Default), "Fehlende Taste fällt auf Alt zurück");
+        }
+        finally { Directory.Delete(directory, true); }
+
+        const int down = 0x100, up = 0x101, f13 = 0x7C;
+        var settings = new Settings { Hotkey = [f13] };
+        using var controller = new WindowController(settings, installHook: false, findWindow: _ => 0);
+        Check(!controller.IsHotkeyHeld(1000), "F13 nicht gedrückt");
+        Check(controller.HandleKey(down, f13, false, 1000) && controller.IsHotkeyHeld(1100), "F13 drücken wird geschluckt und gilt als gehalten");
+        Check(controller.HandleKey(down, f13, false, 1400) && controller.IsHotkeyHeld(2800), "Wiederholung hält die Taste aktiv");
+        Check(!controller.IsHotkeyHeld(3000), "Ohne Wiederholung gilt die Taste nach 1,5 s als losgelassen");
+        Check(controller.HandleKey(up, f13, false, 3100) && !controller.IsHotkeyHeld(3100), "Loslassen wird geschluckt und beendet das Halten");
+        Check(!controller.HandleKey(down, 0x41, false, 3200) && !controller.HandleKey(down, f13, true, 3200), "Andere und eingespeiste Tasten bleiben unberührt");
+        controller.HandleKey(up, f13, true, 3200);
+
+        int[]? result = [];
+        controller.Record(keys => result = keys);
+        Check(controller.HandleKey(down, 0xA2, false, 4000) && controller.HandleKey(0x104, 0xA5, false, 4010), "Aufnahme schluckt Strg und Alt");
+        controller.HandleKey(up, 0xA2, false, 4100);
+        Check(result is { Length: 0 }, "Aufnahme läuft, solange eine Taste gedrückt ist");
+        controller.HandleKey(0x105, 0xA5, false, 4200);
+        Check(result != null && result.Order().SequenceEqual(new[] { Hotkeys.Control, Hotkeys.Alt }.Order()), "Aufnahme ergibt Strg + Alt");
+        Check(!controller.HandleKey(down, 0x41, false, 4300), "Nach der Aufnahme gehen Tasten wieder durch");
+        controller.HandleKey(up, 0x41, false, 4300);
+        result = [];
+        controller.Record(keys => result = keys);
+        controller.HandleKey(down, Hotkeys.Escape, false, 5000);
+        Check(result == null, "Esc bricht die Aufnahme ab");
+        controller.HandleKey(up, Hotkeys.Escape, false, 5010);
+        result = [];
+        controller.Record(keys => result = keys);
+        controller.CancelRecording();
+        Check(result == null, "Schliessen der Einstellungen bricht die Aufnahme ab");
     }
 
     private static void UpdaterChecks()

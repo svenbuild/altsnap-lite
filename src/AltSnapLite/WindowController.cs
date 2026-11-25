@@ -8,13 +8,18 @@ internal sealed class WindowController : IDisposable
 {
     private readonly Settings settings;
     private readonly Func<Native.Point, nint> findWindow;
-    private readonly Native.HookProc callback;
+    private readonly Native.HookProc callback, keyboardCallback;
+    private readonly bool live;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 16 };
     private readonly SnapPreview preview = new();
     private readonly TopmostFrames frames = new();
     private readonly bool elevated = Native.IsElevated((uint)Environment.ProcessId);
     private readonly Dictionary<nint, (uint Process, Rectangle Bounds)> restored = new();
-    private nint hook;
+    private nint hook, keyboardHook;
+    // Nur für Nicht-Zusatztasten (z. B. CapsLock): Zeit des letzten Drückens und ob es geschluckt wurde.
+    private readonly Dictionary<int, long> keyTimes = new();
+    private readonly HashSet<int> swallowed = new(), recordHeld = new(), recorded = new();
+    private Action<int[]?>? recorder;
     private Gesture? gesture;
     private nint pendingTopmost;
     private bool middleConsumed, updatePosted;
@@ -43,6 +48,8 @@ internal sealed class WindowController : IDisposable
         this.findWindow = findWindow ?? FindWindow;
         _ = preview.Handle;
         callback = OnMouse;
+        keyboardCallback = OnKey;
+        live = installHook;
         postedUpdate = () => { updatePosted = false; Update(); };
         if (installHook)
         {
@@ -50,6 +57,105 @@ internal sealed class WindowController : IDisposable
             if (hook == 0) throw new Win32Exception(Marshal.GetLastWin32Error(), Strings.HookFailed);
         }
         timer.Tick += (_, _) => Update();
+        UpdateKeyboardHook();
+    }
+
+    // Der Tastatur-Hook läuft nur, wenn er gebraucht wird: beim Aufnehmen einer Taste oder für Tasten wie CapsLock.
+    // Zusatztasten (Strg, Alt, Umschalt, Win) werden direkt abgefragt.
+    internal void UpdateKeyboardHook()
+    {
+        bool needed = live && (recorder != null || settings.Hotkey.Any(key => !Hotkeys.IsModifier(key)));
+        if (needed && keyboardHook == 0)
+            keyboardHook = Native.SetWindowsHookEx(Native.KeyboardHook, keyboardCallback, Native.GetModuleHandle(null), 0);
+        else if (!needed && keyboardHook != 0)
+        {
+            Native.UnhookWindowsHookEx(keyboardHook);
+            keyboardHook = 0;
+        }
+        if (!needed) { keyTimes.Clear(); swallowed.Clear(); }
+    }
+
+    // Nächste gedrückte Taste oder Kombination aufnehmen; null bei Esc oder Abbruch.
+    internal void Record(Action<int[]?> done)
+    {
+        recorder = done;
+        recordHeld.Clear();
+        recorded.Clear();
+        UpdateKeyboardHook();
+    }
+
+    internal void CancelRecording() { if (recorder != null) FinishRecording(null); }
+
+    private void FinishRecording(int[]? keys)
+    {
+        var done = recorder;
+        recorder = null;
+        UpdateKeyboardHook();
+        done?.Invoke(keys);
+    }
+
+    private nint OnKey(int code, nint message, nint pointer)
+    {
+        if (code < 0) return Native.CallNextHookEx(keyboardHook, code, message, pointer);
+        try
+        {
+            var data = Marshal.PtrToStructure<Native.KeyData>(pointer);
+            if (HandleKey((int)message, (int)data.Key, (data.Flags & 0x10) != 0, Environment.TickCount64)) return 1;
+        }
+        catch (Exception) { }
+        return Native.CallNextHookEx(keyboardHook, code, message, pointer);
+    }
+
+    // true = Tastenereignis schlucken.
+    internal bool HandleKey(int message, int key, bool injected, long now)
+    {
+        if (injected) return false;
+        key = Hotkeys.Normalize(key);
+        bool down = message is 0x100 or 0x104;
+        if (recorder != null)
+        {
+            // Beim Aufnehmen geht keine Taste an andere Programme (sonst öffnet z. B. Win das Startmenü).
+            if (down)
+            {
+                if (key == Hotkeys.Escape && recorded.Count == 0) { FinishRecording(null); return true; }
+                recordHeld.Add(key);
+                recorded.Add(key);
+            }
+            else if (recordHeld.Remove(key) && recordHeld.Count == 0) FinishRecording(recorded.ToArray());
+            return true;
+        }
+        if (Hotkeys.IsModifier(key) || !settings.Hotkey.Contains(key)) return false;
+        if (down)
+        {
+            keyTimes[key] = now;
+            // Taste wie CapsLock nur schlucken, wenn die übrigen Tasten der Kombination gedrückt sind.
+            if (swallowed.Contains(key) || settings.Hotkey.Where(Hotkeys.IsModifier).All(IsPhysicallyDown))
+            {
+                swallowed.Add(key);
+                return true;
+            }
+            return false;
+        }
+        keyTimes.Remove(key);
+        return swallowed.Remove(key);
+    }
+
+    // Eine gehaltene Taste wiederholt sich laufend; ohne Wiederholung seit 1,5 s gilt sie als losgelassen.
+    internal bool IsHotkeyHeld(long now) => settings.Hotkey.All(key => Hotkeys.IsModifier(key)
+        ? IsPhysicallyDown(key)
+        : keyTimes.TryGetValue(key, out long time) && now - time < 1500);
+
+    private static bool IsPhysicallyDown(int key) => key == Hotkeys.Win
+        ? ((Native.GetAsyncKeyState(0x5B) | Native.GetAsyncKeyState(0x5C)) & 0x8000) != 0
+        : (Native.GetAsyncKeyState(key) & 0x8000) != 0;
+
+    // Nach einem geschluckten Klick mit Alt oder Win: eine unbelegte Taste senden, damit beim Loslassen
+    // weder die Menüleiste des Programms noch das Startmenü aufgeht.
+    private void SuppressMenu()
+    {
+        if (!live || !settings.Hotkey.Any(key => key is Hotkeys.Alt or Hotkeys.Win)) return;
+        Native.keybd_event(0xE8, 0, 0, 0);
+        Native.keybd_event(0xE8, 0, 2, 0);
     }
 
     // Keine Geste aktiv: ein Update darf die App jetzt neu starten.
@@ -61,14 +167,14 @@ internal sealed class WindowController : IDisposable
         try
         {
             var data = Marshal.PtrToStructure<Native.MouseData>(pointer);
-            if (HandleMouse((int)message, data, (Native.GetAsyncKeyState(0x12) & 0x8000) != 0)) return 1;
+            if (HandleMouse((int)message, data, IsHotkeyHeld(Environment.TickCount64))) return 1;
         }
         // Eine Ausnahme im Hook würde die ganze App beenden; das Ereignis dann lieber normal durchreichen.
         catch (Exception) { }
         return Native.CallNextHookEx(hook, code, message, pointer);
     }
 
-    internal bool HandleMouse(int action, Native.MouseData data, bool altHeld)
+    internal bool HandleMouse(int action, Native.MouseData data, bool hotkeyHeld)
     {
         // Zum geschluckten Mittelklick gehört auch das Loslassen, sonst sieht die App eine halbe Klickfolge.
         if (action == Native.MiddleUp && middleConsumed) { middleConsumed = false; return true; }
@@ -94,7 +200,7 @@ internal sealed class WindowController : IDisposable
             // Erneutes Drücken derselben Taste: das Loslassen ging verloren (z. B. Sperrbildschirm). Alte Geste verwerfen.
             if (action == (current.Resize ? Native.RightDown : Native.LeftDown)) { gesture = null; preview.Hide(); }
         }
-        if (!settings.Enabled || gesture != null || !altHeld) return false;
+        if (!settings.Enabled || gesture != null || !hotkeyHeld || recorder != null) return false;
 
         bool resize = action == Native.RightDown, pin = action == Native.MiddleDown;
         if (action != Native.LeftDown && !(resize && settings.Resize) && !(pin && settings.TopmostClick))
@@ -109,6 +215,7 @@ internal sealed class WindowController : IDisposable
             gesture = new Gesture(window, resize, data.Point.Drawing) { DoubleClick = IsDoubleClick(window, data.Point.Drawing, resize) };
             timer.Start();
         }
+        SuppressMenu();
         return true;
     }
 
@@ -299,6 +406,7 @@ internal sealed class WindowController : IDisposable
         timer.Stop();
         timer.Dispose();
         if (hook != 0) { Native.UnhookWindowsHookEx(hook); hook = 0; }
+        if (keyboardHook != 0) { Native.UnhookWindowsHookEx(keyboardHook); keyboardHook = 0; }
         preview.Dispose();
         frames.Dispose();
     }

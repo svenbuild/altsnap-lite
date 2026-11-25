@@ -12,6 +12,8 @@ internal sealed class Settings
     public bool Preview { get; set; } = true;
     public bool AutoUpdate { get; set; } = true;
     public int SnapDistance { get; set; } = 24;
+    // Taste oder Kombination für die Gesten als virtuelle Tastencodes, Standard Alt.
+    public int[] Hotkey { get; set; } = Hotkeys.Default;
     // Version, die nach einem Update nicht starten konnte; wird nicht erneut installiert.
     public string? SkippedVersion { get; set; }
     // Keine Einstellungsdatei gefunden: erster Start.
@@ -27,6 +29,7 @@ internal sealed class Settings
         {
             var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path ?? FilePath)) ?? new();
             settings.SnapDistance = Math.Clamp(settings.SnapDistance, 8, 64);
+            if (!Hotkeys.IsValid(settings.Hotkey)) settings.Hotkey = Hotkeys.Default;
             return settings;
         }
         catch (FileNotFoundException) { return new() { IsNew = true }; }

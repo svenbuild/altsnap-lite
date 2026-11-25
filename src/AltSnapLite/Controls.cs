@@ -225,18 +225,31 @@ internal sealed class Slider : Control
 internal sealed class GestureRow : Control
 {
     private readonly Theme theme;
-    private readonly string keys, action;
+    private readonly string input, action;
+    private string hotkey;
 
-    internal GestureRow(Theme theme, string keys, string action)
+    internal GestureRow(Theme theme, string hotkey, string input, string action)
     {
         this.theme = theme;
-        this.keys = keys;
+        this.hotkey = hotkey;
+        this.input = input;
         this.action = action;
-        AccessibleName = action + ": " + keys;
+        AccessibleName = action + ": " + hotkey + " + " + input;
         AccessibleRole = AccessibleRole.StaticText;
         TabStop = false;
         SetStyle(ControlStyles.Selectable, false);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal string Hotkey
+    {
+        set
+        {
+            hotkey = value;
+            AccessibleName = action + ": " + hotkey + " + " + input;
+            Invalidate();
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -247,8 +260,8 @@ internal sealed class GestureRow : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using var chipFont = new Font(Font.FontFamily, Font.Size - 0.75f, FontStyle.Bold);
         const TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
-        // "Alt + Links ziehen" wird zu den Chips "Alt" und "Links ziehen", rechtsbündig.
-        var parts = keys.Split(" + ");
+        // "Strg + Alt" und "Links ziehen" werden zu den Chips "Strg", "Alt" und "Links ziehen", rechtsbündig.
+        var parts = hotkey.Split(" + ").Append(input).ToArray();
         var sizes = parts.Select(part => TextRenderer.MeasureText(g, part, chipFont, Size.Empty, flags)).ToArray();
         var plus = TextRenderer.MeasureText(g, "+", Font, Size.Empty, flags);
         float pad = 8 * scale, gap = 6 * scale;
@@ -273,9 +286,85 @@ internal sealed class GestureRow : Control
                 g.DrawPath(border, path);
             }
             TextRenderer.DrawText(g, parts[i], chipFont, new Point((int)(chip.X + pad), (int)(chip.Y + 4 * scale)),
-                i == 0 && parts.Length > 1 ? theme.Accent : theme.Text, flags);
+                i < parts.Length - 1 ? theme.Accent : theme.Text, flags);
             x = chip.Right;
         }
+    }
+}
+
+// Zeile "Taste für Gesten" mit der aktuellen Taste als Chip; Klick startet die Aufnahme.
+internal sealed class KeyPicker : Control
+{
+    private readonly Theme theme;
+    private string value = "";
+    private bool recording, hover;
+
+    internal KeyPicker(Theme theme, string text)
+    {
+        this.theme = theme;
+        Text = text;
+        AccessibleName = text;
+        AccessibleRole = AccessibleRole.PushButton;
+        TabStop = true;
+        Cursor = Cursors.Hand;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+            | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal string Value
+    {
+        get => value;
+        set { this.value = value; AccessibleDescription = value; Invalidate(); }
+    }
+
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal bool Recording
+    {
+        get => recording;
+        set { recording = value; Invalidate(); }
+    }
+
+    protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode is Keys.Enter or Keys.Space) OnClick(EventArgs.Empty);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        float scale = DeviceDpi / 96f;
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? theme.Surface);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        if (hover)
+        {
+            using var path = Theme.RoundedRectangle(new RectangleF(4 * scale, 2 * scale, Width - 8 * scale, Height - 4 * scale), 6 * scale);
+            using var brush = new SolidBrush(theme.Hover);
+            g.FillPath(brush, path);
+        }
+        const TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
+        using var chipFont = new Font(Font.FontFamily, Font.Size - 0.75f, FontStyle.Bold);
+        string shown = recording ? Strings.PressKey : value;
+        var size = TextRenderer.MeasureText(g, shown, chipFont, Size.Empty, flags);
+        var chip = new RectangleF(Width - 16 * scale - size.Width - 20 * scale, (Height - size.Height) / 2f - 5 * scale,
+            size.Width + 20 * scale, size.Height + 10 * scale);
+        TextRenderer.DrawText(g, Text, Font, new Rectangle((int)(16 * scale), 0, (int)(chip.Left - 24 * scale), Height), theme.Text,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        using (var path = Theme.RoundedRectangle(chip, 6 * scale))
+        using (var fill = new SolidBrush(theme.Chip))
+        using (var border = new Pen(recording || Focused && ShowFocusCues ? theme.Accent : theme.Border, Math.Max(1, (recording ? 2 : 1) * scale)))
+        {
+            g.FillPath(fill, path);
+            g.DrawPath(border, path);
+        }
+        TextRenderer.DrawText(g, shown, chipFont, new Point((int)(chip.X + 10 * scale), (int)(chip.Y + 5 * scale)),
+            recording ? theme.Muted : theme.Accent, flags);
     }
 }
 

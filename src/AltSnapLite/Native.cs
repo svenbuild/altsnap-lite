@@ -5,7 +5,7 @@ namespace AltSnapLite;
 
 internal static class Native
 {
-    internal const int MouseHook = 14, LeftDown = 0x201, LeftUp = 0x202,
+    internal const int KeyboardHook = 13, MouseHook = 14, LeftDown = 0x201, LeftUp = 0x202,
         RightDown = 0x204, RightUp = 0x205, MiddleDown = 0x207, MiddleUp = 0x208, MouseMove = 0x200;
     internal const uint NoSize = 0x1, NoMove = 0x2, NoActivate = 0x10, NoZOrder = 0x4, AsyncWindowPos = 0x4000;
     internal static readonly nint Topmost = new(-1), NotTopmost = new(-2);
@@ -22,6 +22,8 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)]
     internal struct MouseData { public Point Point; public uint Data, Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Sequential)]
+    internal struct KeyData { public uint Key, Scan, Flags, Time; public nuint Extra; }
+    [StructLayout(LayoutKind.Sequential)]
     internal struct Placement
     {
         public uint Length, Flags, Show;
@@ -36,6 +38,7 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern nint CallNextHookEx(nint hook, int code, nint message, nint data);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string? module);
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] internal static extern void keybd_event(byte key, byte scan, uint flags, nuint extra);
     [DllImport("user32.dll")] internal static extern nint WindowFromPoint(Point point);
     [DllImport("user32.dll")] internal static extern nint GetAncestor(nint window, uint flags);
     [DllImport("user32.dll")] internal static extern bool GetWindowRect(nint window, out Rect rect);
