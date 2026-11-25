@@ -17,6 +17,7 @@ internal sealed class Updater : IDisposable
     private readonly Settings settings;
     private readonly Func<bool> idle;
     private readonly Action exit;
+    private readonly SynchronizationContext ui;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 60_000 };
     private DateTime nextCheck = DateTime.MinValue;
     private string? pending;
@@ -35,11 +36,12 @@ internal sealed class Updater : IDisposable
         string.IsNullOrEmpty(typeof(Updater).Assembly.Location) ? Environment.ProcessPath : null;
 #pragma warning restore IL3000
 
-    internal Updater(Settings settings, Func<bool> idle, Action exit)
+    internal Updater(Settings settings, Func<bool> idle, Action exit, SynchronizationContext ui)
     {
         this.settings = settings;
         this.idle = idle;
         this.exit = exit;
+        this.ui = ui;
         timer.Tick += async (_, _) => await Tick();
         if (ExecutablePath != null) timer.Start();
     }
@@ -66,9 +68,13 @@ internal sealed class Updater : IDisposable
             await Download(update.Url, update.Sha256, download, timeout.Token);
             // Die Datei muss wirklich die angekündigte Version sein, sonst entsteht eine Update-Schleife.
             if (FileVersion(download) != update.Version) { TryDelete(download); return; }
-            pending = download;
-            timer.Interval = 2000;
-            TryInstall();
+            // Nach den awaits nicht auf den Thread verlassen: Austausch und Beenden im UI-Thread.
+            ui.Post(_ =>
+            {
+                pending = download;
+                timer.Interval = 2000;
+                TryInstall();
+            }, null);
         }
         // Update ist Komfort: jeder Fehler (Netz, Datei, unerwartete Antwort) wird still ignoriert.
         catch (Exception) { }
@@ -92,12 +98,14 @@ internal sealed class Updater : IDisposable
                 Restore(executable);
                 throw;
             }
-            exit();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             TryDelete(download);
+            return;
         }
+        // Die neue Version wartet auf den Mutex; ein Fehler beim Aufräumen darf das Beenden nicht verhindern.
+        try { exit(); } catch (Exception) { }
     }
 
     internal static (Version Version, string Url, string Sha256)? ParseRelease(string json)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Fix: after a silent update the previous version now exits reliably, so the new version takes over right away instead of at the next start.
+
 ## 1.1.0
 
 - New settings window: two columns, light and dark mode, toggle switches, gesture overview.

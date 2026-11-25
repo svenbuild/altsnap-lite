@@ -38,7 +38,7 @@ internal sealed class TrayApp : ApplicationContext
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowSettings(); };
         tray.BalloonTipClicked += (_, _) => ShowSettings();
         controller = new WindowController(settings);
-        updater = new Updater(settings, () => controller.IsIdle && form is not { Visible: true, ContainsFocus: true }, ExitThread);
+        updater = new Updater(settings, () => controller.IsIdle && form is not { Visible: true, ContainsFocus: true }, ExitForUpdate, context);
         RefreshMenu();
 
         if (updated) tray.ShowBalloonTip(5000, Strings.UpdatedTitle, Strings.UpdatedText(Updater.CurrentText), ToolTipIcon.None);
@@ -47,6 +47,14 @@ internal sealed class TrayApp : ApplicationContext
             tray.ShowBalloonTip(8000, Strings.WelcomeTitle, Strings.WelcomeText, ToolTipIcon.None);
             SaveSettings();
         }
+    }
+
+    // Für das Update beenden. Falls das Beenden hängt, nach 10 Sekunden hart beenden,
+    // damit die neue Version den Mutex bekommt.
+    private void ExitForUpdate()
+    {
+        new Thread(() => { Thread.Sleep(10_000); Environment.Exit(0); }) { IsBackground = true }.Start();
+        ExitThread();
     }
 
     // Zweiter Start der EXE: Einstellungen der laufenden Instanz zeigen.
