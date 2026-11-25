@@ -143,7 +143,10 @@ internal static class Program
         Check(controller.HandleKey(up, f13, false, 3100) && !controller.IsHotkeyHeld(3100), "Loslassen wird geschluckt und beendet das Halten");
         Check(!controller.HandleKey(down, 0x41, false, 3200) && !controller.HandleKey(down, f13, true, 3200), "Andere und eingespeiste Tasten bleiben unberührt");
         controller.HandleKey(up, f13, true, 3200);
-
+        settings.Enabled = false;
+        Check(!controller.HandleKey(down, f13, false, 3300) && !controller.HandleKey(up, f13, false, 3350), "Im Pause-Modus wird nichts geschluckt");
+        settings.Enabled = true;
+        
         int[]? result = [];
         controller.Record(keys => result = keys, 0);
         Check(controller.HandleKey(down, 0xA2, false, 4000) && controller.HandleKey(0x104, 0xA5, false, 4010), "Aufnahme schluckt Strg und Alt");
@@ -156,10 +159,12 @@ internal static class Program
         controller.HandleKey(up, 0x41, false, 4300);
         result = [];
         controller.Record(keys => result = keys, 0);
+        controller.HandleKey(down, 0xA2, false, 4900);
         controller.HandleKey(down, Hotkeys.Escape, false, 5000);
         Pump(50);
-        Check(result == null, "Esc bricht die Aufnahme ab");
+        Check(result == null, "Esc bricht die Aufnahme jederzeit ab");
         controller.HandleKey(up, Hotkeys.Escape, false, 5010);
+        controller.HandleKey(up, 0xA2, false, 5010);
         result = [];
         controller.Record(keys => result = keys, 0);
         controller.CancelRecording();

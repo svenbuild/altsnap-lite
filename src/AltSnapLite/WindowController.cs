@@ -90,6 +90,8 @@ internal sealed class WindowController : IDisposable
         for (int key = 0x08; key <= 0xFE; key++)
             if (live && (Native.GetAsyncKeyState(key) & 0x8000) != 0) heldBefore.Add(Hotkeys.Normalize(key));
         UpdateKeyboardHook();
+        // Ohne Tastatur-Hook kommt nie eine Taste an: Aufnahme gleich wieder beenden.
+        if (live && keyboardHook == 0) FinishRecording(null);
     }
 
     internal void CancelRecording() { if (recorder != null) FinishRecording(null); }
@@ -127,6 +129,8 @@ internal sealed class WindowController : IDisposable
         {
             // Sicherheitsnetz: eine Aufnahme, deren Loslassen verloren ging (z. B. Sperrbildschirm), endet nach 10 s.
             if (now - recordStart > 10_000) { FinishRecording(null); return false; }
+            // Esc bricht immer ab.
+            if (down && key == Hotkeys.Escape) { FinishRecording(null); return true; }
             // Tasten, die schon vor der Aufnahme gedrückt waren, normal durchlassen.
             if (heldBefore.Contains(key))
             {
@@ -136,7 +140,6 @@ internal sealed class WindowController : IDisposable
             // Beim Aufnehmen geht keine Taste an andere Programme (sonst öffnet z. B. Win das Startmenü).
             if (down)
             {
-                if (key == Hotkeys.Escape && recorded.Count == 0) { FinishRecording(null); return true; }
                 recordHeld.Add(key);
                 recorded.Add(key);
             }
@@ -147,9 +150,12 @@ internal sealed class WindowController : IDisposable
         if (Hotkeys.IsModifier(key) || !settings.Hotkey.Contains(key)) return false;
         if (down)
         {
+            bool first = !keyTimes.ContainsKey(key);
             keyTimes[key] = now;
-            // Taste wie CapsLock nur schlucken, wenn die übrigen Tasten der Kombination gedrückt sind.
-            if (swallowed.Contains(key) || settings.Hotkey.Where(Hotkeys.IsModifier).All(IsPhysicallyDown))
+            if (swallowed.Contains(key)) return true;
+            // Nur beim ersten Drücken entscheiden (nie mitten in einer Wiederholung), nicht im Pause-Modus,
+            // und nur, wenn die übrigen Tasten der Kombination gedrückt sind.
+            if (first && settings.Enabled && settings.Hotkey.Where(Hotkeys.IsModifier).All(IsPhysicallyDown))
             {
                 swallowed.Add(key);
                 return true;
