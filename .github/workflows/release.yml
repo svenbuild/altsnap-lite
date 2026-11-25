@@ -33,6 +33,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid tag" }
+          # Ein erneut gepushter Tag soll kein zweites Release anlegen.
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output "Release $env:GITHUB_REF_NAME already exists, nothing to do."; exit 0 }
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
           $lines = Get-Content CHANGELOG.md
           $heading = [array]::IndexOf($lines, "## $version")
